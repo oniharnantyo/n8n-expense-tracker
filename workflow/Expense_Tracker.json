@@ -1,0 +1,539 @@
+{
+  "name": "Expense Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Upload Statement",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "file",
+              "fieldType": "file",
+              "multipleFiles": false,
+              "acceptFileTypes": "jpg, pdf, png, jpeg",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        -200,
+        -60
+      ],
+      "id": "753033e6-e5a5-473f-89d7-631d0fbbe6e5",
+      "name": "On form submission",
+      "webhookId": "489128fb-a3ab-4d99-8e49-4e4a59e7dd96"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        488,
+        -140
+      ],
+      "id": "369b7e9f-5134-4a7e-9e7c-28ccccf65096",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "bsSdX7QrO3NTJm2E",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "meta-llama/llama-3.3-70b-instruct:free",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        500
+      ],
+      "id": "b99d1733-22ec-4f05-9117-6c3141526b0c",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "y30tTdS9ikW9emnD",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.result }}",
+                    "rightValue": "BCA REKENING",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    },
+                    "id": "8cb66668-2cd2-4cfe-92d2-f84b50d421b7"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "78b05c8c-e323-46eb-9470-d2728969a82f",
+                    "leftValue": "={{ $json.result }}",
+                    "rightValue": "Tabungan Sinarmas",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        240,
+        -60
+      ],
+      "id": "1ce3ffcc-5456-49ab-862c-cfe418568bef",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ocr-service:5000/",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "fileType",
+              "value": "={{ $if($json.file.mimetype == \"application/pdf\", \"pdf\", \"image\") }}"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "=file",
+              "inputDataFieldName": "file"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        20,
+        -60
+      ],
+      "id": "2fcba7bb-2708-4491-b313-7c968225e57a",
+      "name": "OCR Service"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a bank BCA statement parser\n\nThe input possibly contains some pages. Make sure all page (HALAMAN) already parsed, the end of the page could be \"HALAMAN: 3/3\"\n\nExtract the following information:\n1. ***date***: transaction date. extract from \"TANGGAL\" in format DD/MM/YYYY.\n2. ***title***: title of the transaction. Ex: Tarikan ATM, Shopee, QR, Transfer. If QR please attach the merchant Ex: BABY WISE, warteg doa, etc.\n3. ***source***: BCA\n4. ***account***: Name of the Bank Account Holder. Usually near text \"NO. REKENING\"\n5. ***debitOrCredit***: DB for debit if blank set as credit.\n6. ***nominal***: nominal of the transaction. In column \"Mutasi\"\n7. Respond only with raw JSON, without markdown or code blocks.\n\n\nReturn as JSON:\n[\n  {\n    \"date\": \"31/01/2025\"\n    \"title\": \"Pembayaran QR\",\n    \"source\": \"Bank BCA\",\n    \"account\": \"Account Name\",\n    \"category\": \"Penarikan ATM\",\n    \"debitOrCredit\": \"debit|credit\",\n    \"nominal\": 120000\n  }\n]\n\nocr result from input:\n{{ $json.result  }}",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.9,
+      "position": [
+        460,
+        -360
+      ],
+      "id": "f8174b01-1439-4d45-8976-7199247ef36a",
+      "name": "Agent BCA"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1xjVCwxx3_sXnVqk_B2J7lKdS5-P136dBJbhab5OnaGg/",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1xjVCwxx3_sXnVqk_B2J7lKdS5-P136dBJbhab5OnaGg/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Tanggal": "={{ $json.output.date }}",
+            "Judul": "={{ $json.output.title }}",
+            "Sumber": "={{ $json.output.source }}",
+            "Akun": "={{ $json.output.account }}",
+            "Kategori": "={{ $json.output.category }}",
+            "Debit/Credit": "={{ $json.output.debitOrCredit }}",
+            "Nominal": "={{ $json.output.nominal }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Tanggal",
+              "displayName": "Tanggal",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Judul",
+              "displayName": "Judul",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Sumber",
+              "displayName": "Sumber",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Akun",
+              "displayName": "Akun",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Kategori",
+              "displayName": "Kategori",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Debit/Credit",
+              "displayName": "Debit/Credit",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Nominal",
+              "displayName": "Nominal",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "output",
+              "displayName": "output",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1056,
+        -60
+      ],
+      "id": "a2a38ee4-445d-4062-936e-898e5d39f766",
+      "name": "Google Sheets",
+      "credentials": {
+        "googleApi": {
+          "id": "hRS1eZk9VjNLWq66",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "You are a Bank Sinarmas statement parser\n\nThe input possibly contains some pages. Make sure all page (HALAMAN) already parsed, the end of the page could be \"Page 2 of 2\" or \"Page n of total\"\n\nExtract the following information:\n1. ***date***: transaction date. extract from \"Tgl Date\" in format DD/MM/YYYY.\n2. ***title***: title of the transaction. Ex: Tarikan ATM, Shopee, QR, Transfer. If QR please attach the merchant Ex: BABY WISE, warteg doa, etc. Extract from \"Keterangan Description\" and \"Detail\" then concat.\n3. ***source***: Sinarmas\n4. ***account***: Name of the Bank Account Holder. Usually near text \"ACCOUNT STATEMENT\"\n5. ***debitOrCredit***: Extract from field \"Debet Debit\" for debit or field \"Kredit credit\" fro credit.\n6. ***nominal***: Extract nominal from field \"Debet Debit\"  or field \"Kredit credit\" credit\n7. Respond only with raw JSON, without markdown or code blocks.\n\n\nReturn as JSON:\n[\n  {\n    \"date\": \"31/01/2025\"\n    \"title\": \"Pembayaran QR\",\n    \"source\": \"Bank Sinarmas\",\n    \"account\": \"Account Name\",\n    \"category\": \"Penarikan ATM\",\n    \"debitOrCredit\": \"debit|credit\",\n    \"nominal\": 120000\n  }\n]\n\nocr result from input:\n{{ $json.result  }}",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.9,
+      "position": [
+        460,
+        140
+      ],
+      "id": "7dfb30e3-9ee1-48bb-8905-3151a916e4af",
+      "name": "Agent Sinarmas",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "[\n    {\n        \"date\": \"04/04/2025\",\n        \"title\": \"BI-FAST CR BIF TRANSFER\",\n        \"source\": \"Bank BCA\",\n        \"account\": \"ONI HARNANTYO\",\n        \"category\": \"Transfer\",\n        \"debitOrCredit\": \"credit\",\n        \"nominal\": 300000000\n    }\n]"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        608,
+        -140
+      ],
+      "id": "9e4a8533-f511-4841-8e6b-ab7836d2154f",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "output",
+        "include": "allOtherFields",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        836,
+        -60
+      ],
+      "id": "e219f43c-2d61-4d28-a435-4a99069e361a",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        488,
+        360
+      ],
+      "id": "e613eb24-7caf-49cc-82eb-150f492ddd0b",
+      "name": "Google Gemini Chat Model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "bsSdX7QrO3NTJm2E",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "[\n    {\n        \"date\": \"04/04/2025\",\n        \"title\": \"BI-FAST CR BIF TRANSFER\",\n        \"source\": \"Bank BCA\",\n        \"account\": \"ONI HARNANTYO\",\n        \"category\": \"Transfer\",\n        \"debitOrCredit\": \"credit\",\n        \"nominal\": 300000000\n    }\n]"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        608,
+        360
+      ],
+      "id": "a99316fa-daba-4680-a5f3-1302e27d8136",
+      "name": "Structured Output Parser1"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {}
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        1040,
+        500
+      ],
+      "id": "d3fa92de-bbfb-43ef-8564-22665f091425",
+      "name": "Schedule Trigger"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "OCR Service",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agent BCA",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        []
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Agent BCA",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Agent Sinarmas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OCR Service": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent BCA": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent Sinarmas": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets": {
+      "main": [
+        []
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Agent BCA",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agent Sinarmas",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Agent Sinarmas",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "9736299e-0bbe-4fbe-b594-46cff9551620",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3457f08edba01c6eb52f34809753e2410e2d7e0314c7f6d18ddfb19184408075"
+  },
+  "id": "0XPtn5FP84AAnEsJ",
+  "tags": []
+}
